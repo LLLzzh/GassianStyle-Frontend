@@ -1,17 +1,15 @@
 // import { useState } from 'react'
 // import reactLogo from './assets/react.svg'
 // import viteLogo from '/vite.svg'
-import './App.css'
-import {ProcessingPage} from "./pages/ProcessingPage.tsx";
+import "./App.css";
+import { ProcessingPage } from "./pages/ProcessingPage.tsx";
 
 function App() {
-
-
   return (
     <>
-     <ProcessingPage></ProcessingPage>
+      <ProcessingPage></ProcessingPage>
     </>
-  )
+  );
 }
 
-export default App
+export default App;

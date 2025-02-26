@@ -1,171 +1,251 @@
 import { useState } from "react";
-import { FileUpload } from "../components/FileUpload";
-import { processVideo } from "../api/gs3d";
+import { clipVideo, generatePly, stylizePly } from "../api/gs3d";
 
-interface ProcessState {
-  currentStep: number;
-  loading: boolean;
-  videoPath: string;
-  imagesPath: string;
-  scenePath: string;
-  styleImagePath: string;
-  resultPath: string;
-}
+const PlyViewer = ({ plyUrl }: { plyUrl: string }) => {
+  return (
+    <iframe
+      src={`https://playcanvas.com/supersplat/editor?load=${encodeURIComponent(
+        plyUrl
+      )}`}
+      className="w-full h-[600px] border-0 rounded-lg"
+      title="PLY查看器"
+    />
+  );
+};
 
 export const ProcessingPage = () => {
-  const [state, setState] = useState<ProcessState>({
-    currentStep: 0,
-    loading: false,
-    videoPath: "",
-    imagesPath: "",
-    scenePath: "",
-    styleImagePath: "",
-    resultPath: "",
-  });
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [styleImage, setStyleImage] = useState<File | null>(null);
+  const [imagesPath, setImagesPath] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
+  const [currentStep, setCurrentStep] = useState<number>(1);
+  const [finalPlyUrl, setFinalPlyUrl] = useState<string>("");
 
-  // 处理视频上传
-  const handleVideoUpload = async (file: File) => {
-    setState((prev) => ({ ...prev, loading: true }));
-    try {
-      const res = await processVideo.uploadVideo(file);
-      setState((prev) => ({
-        ...prev,
-        videoPath: res.data.videoPath,
-      }));
-      await handleClipFrames(res.data.videoPath);
-    } catch (error) {
-      console.error("视频上传失败:", error);
-    } finally {
-      setState((prev) => ({ ...prev, loading: false }));
+  const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setVideoFile(e.target.files[0]);
     }
   };
 
-  // 处理帧提取
-  const handleClipFrames = async (videoPath: string) => {
-    setState((prev) => ({ ...prev, loading: true }));
-    try {
-      const res = await processVideo.clipFrames(videoPath);
-      setState((prev) => ({
-        ...prev,
-        imagesPath: res.data.imagesPath,
-        currentStep: 1,
-      }));
-      await handleGenerate(res.data.imagesPath);
-    } catch (error) {
-      console.error("帧提取失败:", error);
-    } finally {
-      setState((prev) => ({ ...prev, loading: false }));
+  const handleStyleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setStyleImage(e.target.files[0]);
     }
   };
 
-  // 处理3D场景生成
-  const handleGenerate = async (imagesPath: string) => {
-    setState((prev) => ({ ...prev, loading: true }));
+  const handleClipVideo = async () => {
+    if (!videoFile) return;
+    setLoading(true);
     try {
-      const res = await processVideo.generateScene(imagesPath);
-      setState((prev) => ({
-        ...prev,
-        scenePath: res.data.scenePath,
-        currentStep: 2,
-      }));
+      const response = await clipVideo({ video: videoFile });
+      setImagesPath(response.output_images_path);
+      setCurrentStep(2);
     } catch (error) {
-      console.error("场景生成失败:", error);
-    } finally {
-      setState((prev) => ({ ...prev, loading: false }));
+      console.error("视频处理失败:", error);
     }
+    setLoading(false);
   };
 
-  // 处理风格图片上传
-  const handleStyleUpload = async (file: File) => {
-    // 这里应该先上传风格图片到服务器
-    setState((prev) => ({
-      ...prev,
-      styleImagePath: URL.createObjectURL(file),
-    }));
+  const handleGeneratePly = async () => {
+    if (!imagesPath) return;
+    setLoading(true);
+    try {
+      const response = await generatePly({ images_path: imagesPath });
+      const plyBlob = response.ply_file;
+      const plyUrl = URL.createObjectURL(plyBlob);
+      setCurrentStep(3);
+      setFinalPlyUrl(plyUrl);
+    } catch (error) {
+      console.error("生成PLY失败:", error);
+    }
+    setLoading(false);
   };
 
-  // 处理风格迁移
-  const handleStylize = async () => {
-    setState((prev) => ({ ...prev, loading: true }));
+  const handleStylizePly = async () => {
+    if (!styleImage || !imagesPath) return;
+    setLoading(true);
     try {
-      const res = await processVideo.stylizeScene(
-        state.scenePath,
-        state.styleImagePath
-      );
-      setState((prev) => ({
-        ...prev,
-        resultPath: res.data.resultPath,
-        currentStep: 3,
-      }));
+      const response = await stylizePly({
+        scene_path: imagesPath,
+        style_image: styleImage,
+      });
+      const finalPlyBlob = response.ply_file;
+      const url = URL.createObjectURL(finalPlyBlob);
+      setFinalPlyUrl(url);
     } catch (error) {
-      console.error("风格迁移失败:", error);
-    } finally {
-      setState((prev) => ({ ...prev, loading: false }));
+      console.error("风格化失败:", error);
     }
+    setLoading(false);
   };
+
+  const steps = [
+    { id: 1, title: "视频采样", icon: "01" },
+    { id: 2, title: "生成PLY", icon: "02" },
+    { id: 3, title: "风格化", icon: "03" },
+  ];
 
   return (
-    <div className="max-w-4xl mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-8">3D场景生成与风格化</h1>
+    <div className="max-w-4xl mx-auto p-6">
+      <h1 className="text-3xl font-bold mb-8">3D模型生成与风格化</h1>
 
-      {/* 步骤指示器 */}
-      <div className="flex justify-between mb-8">
-        {["上传视频", "提取帧", "生成场景", "风格迁移"].map((step, index) => (
-          <div
-            key={step}
-            className={`flex items-center ${
-              index <= state.currentStep ? "text-blue-500" : "text-gray-400"
-            }`}
-          >
-            <div className="w-8 h-8 rounded-full border-2 flex items-center justify-center">
-              {index + 1}
-            </div>
-            <span className="ml-2">{step}</span>
-          </div>
-        ))}
+      {/* 标签导航 */}
+      <div className="border-b border-gray-200 mb-6">
+        <nav className="flex -mb-px">
+          {steps.map((step) => (
+            <button
+              key={step.id}
+              className={`mr-8 py-4 px-4 border-b-2 font-medium text-sm flex items-center ${
+                currentStep === step.id
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+              onClick={() => step.id <= currentStep && setCurrentStep(step.id)}
+              disabled={step.id > currentStep}
+            >
+              <span
+                className={`
+                w-6 h-6 rounded-full flex items-center justify-center mr-2 text-xs
+                ${
+                  currentStep === step.id
+                    ? "bg-blue-500 text-white"
+                    : "bg-gray-200 text-gray-600"
+                }
+              `}
+              >
+                {step.icon}
+              </span>
+              {step.title}
+            </button>
+          ))}
+        </nav>
       </div>
 
-      {/* 主要内容区 */}
-      <div className="space-y-8">
-        {/* 步骤1: 视频上传 */}
-        <div className={state.currentStep === 0 ? "" : "hidden"}>
-          <FileUpload
-            accept="video/*"
-            onUpload={handleVideoUpload}
-            disabled={state.loading}
-          />
-        </div>
+      {/* 内容区域 */}
+      <div className="bg-white rounded-lg shadow p-6">
+        {/* 步骤1：视频采样 */}
+        {currentStep === 1 && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-center w-full">
+              <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
+                <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                  <svg
+                    className="w-8 h-8 mb-4 text-gray-500"
+                    aria-hidden="true"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 20 16"
+                  >
+                    <path
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2"
+                    />
+                  </svg>
+                  <p className="mb-2 text-sm text-gray-500">
+                    <span className="font-semibold">点击上传视频</span>
+                  </p>
+                </div>
+                <input
+                  type="file"
+                  accept="video/*"
+                  className="hidden"
+                  onChange={handleVideoUpload}
+                />
+              </label>
+            </div>
+            {videoFile && (
+              <div className="text-sm text-gray-500">
+                已选择文件: {videoFile.name}
+              </div>
+            )}
+            <button
+              onClick={handleClipVideo}
+              disabled={!videoFile || loading}
+              className="w-full bg-blue-500 text-white px-4 py-2 rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed hover:bg-blue-600 transition-colors"
+            >
+              {loading ? "处理中..." : "开始处理"}
+            </button>
+          </div>
+        )}
 
-        {/* 步骤2: 帧序列展示 */}
-        <div className={state.currentStep === 1 ? "" : "hidden"}>
-          <p>正在处理帧序列...</p>
-        </div>
+        {/* 步骤2：生成PLY */}
+        {currentStep === 2 && (
+          <div className="space-y-4">
+            <p className="text-gray-600 mb-4">
+              视频已处理完成，点击下方按钮生成PLY文件
+            </p>
+            <button
+              onClick={handleGeneratePly}
+              disabled={loading}
+              className="w-full bg-blue-500 text-white px-4 py-2 rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed hover:bg-blue-600 transition-colors"
+            >
+              {loading ? "生成中..." : "生成PLY"}
+            </button>
 
-        {/* 步骤3: 3D场景预览 */}
-        <div className={state.currentStep === 2 ? "" : "hidden"}>
-          <FileUpload
-            accept="image/*"
-            onUpload={handleStyleUpload}
-            disabled={state.loading}
-          />
-          <button
-            className="mt-4 px-4 py-2 bg-blue-500 text-white rounded"
-            onClick={() => handleStylize()}
-            disabled={!state.styleImagePath || state.loading}
-          >
-            开始风格迁移
-          </button>
-        </div>
+            {finalPlyUrl && (
+              <div className="mt-8">
+                <h3 className="text-lg font-medium mb-4">预览结果</h3>
+                <PlyViewer plyUrl={finalPlyUrl} />
+              </div>
+            )}
+          </div>
+        )}
 
-        {/* 步骤4: 结果展示 */}
-        <div className={state.currentStep === 3 ? "" : "hidden"}>
-          <p>处理完成！结果路径: {state.resultPath}</p>
-        </div>
+        {/* 步骤3：风格化 */}
+        {currentStep === 3 && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-center w-full">
+              <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
+                <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                  <svg
+                    className="w-8 h-8 mb-4 text-gray-500"
+                    aria-hidden="true"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 20 16"
+                  >
+                    <path
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2"
+                    />
+                  </svg>
+                  <p className="mb-2 text-sm text-gray-500">
+                    <span className="font-semibold">上传风格图片</span>
+                  </p>
+                </div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleStyleImageUpload}
+                />
+              </label>
+            </div>
+            {styleImage && (
+              <div className="text-sm text-gray-500">
+                已选择文件: {styleImage.name}
+              </div>
+            )}
+            <button
+              onClick={handleStylizePly}
+              disabled={!styleImage || loading}
+              className="w-full bg-blue-500 text-white px-4 py-2 rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed hover:bg-blue-600 transition-colors"
+            >
+              {loading ? "风格化中..." : "开始风格化"}
+            </button>
+          </div>
+        )}
 
-        {/* 加载提示 */}
-        {state.loading && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-            <div className="bg-white p-4 rounded">处理中...</div>
+        {/* 结果展示 */}
+        {finalPlyUrl && (
+          <div className="mt-8">
+            <h3 className="text-lg font-medium mb-4">预览结果</h3>
+            <PlyViewer plyUrl={finalPlyUrl} />
           </div>
         )}
       </div>

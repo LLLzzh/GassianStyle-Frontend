@@ -1,18 +1,19 @@
 import axios from "axios";
-import type {
-  ApiResponse,
-  VideoUploadResponse,
-  ClipFramesResponse,
-  GenerateSceneResponse,
-  StylizeSceneResponse,
+import {
+  ClipResponse,
+  GenerateResponse,
+  StylizedResponse,
+  GenerateRequest,
+  StylizedRequest,
+  ClipRequest,
 } from "../types/api";
 
-const API_BASE = "http://localhost:5000/gs";
+const API_BASE = "http://localhost:5000";
 
 // 创建axios实例
 const apiClient = axios.create({
   baseURL: API_BASE,
-  timeout: 30000, // 30秒超时
+  timeout: 5000, // 5秒超时
   headers: {
     "Content-Type": "application/json",
   },
@@ -27,61 +28,49 @@ apiClient.interceptors.response.use(
   }
 );
 
-export const processVideo = {
-  // 视频上传
-  uploadVideo: async (
-    file: File
-  ): Promise<ApiResponse<VideoUploadResponse>> => {
-    const formData = new FormData();
-    formData.append("video", file);
-    return apiClient.post("/upload", formData, {
+// 视频采样接口
+export const clipVideo = async (params: ClipRequest): Promise<ClipResponse> => {
+  const formData = new FormData();
+  formData.append("video", params.video);
+
+  const response = await apiClient.post<ClipResponse>("/clip", formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+
+  return response.data;
+};
+
+// 生成PLY文件接口
+export const generatePly = async (
+  params: GenerateRequest
+): Promise<GenerateResponse> => {
+  const response = await apiClient.post<GenerateResponse>("/generate", params, {
+    responseType: "blob",
+  });
+
+  return response.data;
+};
+
+// 风格化接口
+export const stylizePly = async (
+  params: StylizedRequest
+): Promise<StylizedResponse> => {
+  const formData = new FormData();
+  formData.append("scene_path", params.scene_path);
+  formData.append("style_image", params.style_image);
+
+  const response = await apiClient.post<StylizedResponse>(
+    "/stylized",
+    formData,
+    {
       headers: {
         "Content-Type": "multipart/form-data",
       },
-    });
-  },
+      responseType: "blob",
+    }
+  );
 
-  // 视频帧提取
-  clipFrames: async (
-    videoPath: string
-  ): Promise<ApiResponse<ClipFramesResponse>> => {
-    return apiClient.get("/clip", {
-      params: { video_path: videoPath },
-    });
-  },
-
-  // 3D场景生成
-  generateScene: async (
-    imagesPath: string
-  ): Promise<ApiResponse<GenerateSceneResponse>> => {
-    return apiClient.get("/generate", {
-      params: { images_path: imagesPath },
-    });
-  },
-
-  // 风格迁移
-  stylizeScene: async (
-    scenePath: string,
-    styleImagePath: string
-  ): Promise<ApiResponse<StylizeSceneResponse>> => {
-    return apiClient.get("/stylized", {
-      params: {
-        scene_path: scenePath,
-        style_image_path: styleImagePath,
-      },
-    });
-  },
-
-  // 上传风格图片
-  uploadStyleImage: async (
-    file: File
-  ): Promise<ApiResponse<{ stylePath: string }>> => {
-    const formData = new FormData();
-    formData.append("style", file);
-    return apiClient.post("/upload-style", formData, {
-      headers: {
-        "Content-Type": "multipart/form-data",
-      },
-    });
-  },
+  return response.data;
 };

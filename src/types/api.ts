@@ -1,23 +1,28 @@
-// API响应的通用类型
-export interface ApiResponse<T = any> {
-  success: boolean;
-  data: T;
-  message?: string;
+// 视频采样接口响应类型
+export interface ClipResponse {
+  output_images_path: string; // 输出图片目录路径
 }
 
-// 视频处理相关的响应类型
-export interface VideoUploadResponse {
-  videoPath: string;
+// 生成PLY接口响应类型
+export interface GenerateResponse {
+  ply_file: Blob; // PLY文件二进制数据
 }
 
-export interface ClipFramesResponse {
-  imagesPath: string;
+// 风格化接口响应类型
+export interface StylizedResponse {
+  ply_file: Blob; // 风格化后的PLY文件二进制数据
 }
 
-export interface GenerateSceneResponse {
-  scenePath: string;
+// 请求参数类型
+export interface GenerateRequest {
+  images_path: string;
 }
 
-export interface StylizeSceneResponse {
-  resultPath: string;
+export interface StylizedRequest {
+  scene_path: string;
+  style_image: File;
+}
+
+export interface ClipRequest {
+  video: File;
 }
